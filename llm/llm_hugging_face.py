@@ -7,7 +7,7 @@ import json
 def bytes_to_gb(bytes):
 	return bytes / (1024 ** 3)
 
-def measure_model_performance(model_name, precision=None, input_text="The quick brown fox", max_tokens=None, batch_size=1):
+def measure_model_performance(model_name, precision=None, input_text="The quick brown fox", max_tokens=2048, batch_size=1):
 	"""Benchmark LLM performance across key metrics"""
 	
 	# Check if CUDA is available
@@ -72,6 +72,20 @@ def measure_model_performance(model_name, precision=None, input_text="The quick 
 	if len(tokenizer) != model.config.vocab_size:
 		model.resize_token_embeddings(len(tokenizer))
 	
+	# Apply optimizations when available
+	if hasattr(model, "config") and hasattr(model.config, "attn_implementation"):
+		# Enable Flash Attention if available
+		model.config.attn_implementation = "flash_attention_2"
+		print("Enabled Flash Attention 2")
+	
+	# Apply torch.compile for PyTorch 2.0+ if available
+	if hasattr(torch, "compile") and device_type == "cuda":
+		try:
+			model = torch.compile(model)
+			print("Applied torch.compile() for faster inference")
+		except Exception as e:
+			print(f"Could not apply torch.compile(): {e}")
+	
 	# Calculate model memory footprint
 	if device_type == "cuda":
 		model_mem = torch.cuda.memory_allocated() - start_mem
@@ -92,8 +106,12 @@ def measure_model_performance(model_name, precision=None, input_text="The quick 
 	if device_type == "cuda":
 		torch.cuda.synchronize()
 	tokenization_start = time.time()
-	inputs = tokenizer(input_text, return_tensors="pt", padding=True)
+	
+	# Handle batch size properly
+	batch_texts = [input_text] * batch_size
+	inputs = tokenizer(batch_texts, return_tensors="pt", padding=True)
 	inputs = {k: v.to(model.device) for k, v in inputs.items()}
+	
 	if device_type == "cuda":
 		torch.cuda.synchronize()
 	tokenization_time = time.time() - tokenization_start
@@ -101,67 +119,46 @@ def measure_model_performance(model_name, precision=None, input_text="The quick 
 	input_tokens_per_sec = input_token_count / tokenization_time if tokenization_time > 0 else 0
 	print(f"Input tokenization: {tokenization_time:.6f}s for {input_token_count} tokens ({input_tokens_per_sec:.2f} tokens/sec)")
 	
-	# Alternative approach for token timing - generate tokens one by one
-	token_times = []
-	generated_ids = inputs["input_ids"].clone()
-	attention_mask = inputs["attention_mask"].clone()
-	
-	# Start generation with timing
+	# Start generation with timing using optimized generate method
 	if device_type == "cuda":
 		torch.cuda.synchronize()
 	
 	# Record start time
 	generation_start = time.time()
-	token_times.append(generation_start)
 	
 	with torch.no_grad():
-		for _ in range(max_tokens):
-			# Generate one token at a time
-			if device_type == "cuda":
-				torch.cuda.synchronize()
-			
-			token_start = time.time()
-			outputs = model(
-				input_ids=generated_ids,
-				attention_mask=attention_mask
-			)
-			next_token_logits = outputs.logits[:, -1, :]
-			next_token = torch.argmax(next_token_logits, dim=-1).unsqueeze(0)
-			
-			if device_type == "cuda":
-				torch.cuda.synchronize()
-			
-			token_times.append(time.time())
-			
-			# Add the predicted token to the sequence
-			generated_ids = torch.cat([generated_ids, next_token], dim=1)
-			# Extend attention mask for the new token
-			attention_mask = torch.cat([
-				attention_mask, 
-				torch.ones((attention_mask.shape[0], 1), device=attention_mask.device)
-			], dim=1)
-			
-			# Stop if we hit the EOS token
-			if next_token.item() == tokenizer.eos_token_id:
-				break
+		generate_kwargs = {
+			"max_new_tokens": max_tokens,
+			"do_sample": False,        # Deterministic for benchmarking
+			"use_cache": True,         # Enable KV caching
+			"pad_token_id": tokenizer.pad_token_id,
+			"return_dict_in_generate": True,
+			"output_scores": True      # Needed for token-by-token timing
+		}
+		
+		outputs = model.generate(**inputs, **generate_kwargs)
 	
 	if device_type == "cuda":
 		torch.cuda.synchronize()
 	generation_end = time.time()
 	
 	# Calculate metrics
-	generated_text = tokenizer.decode(generated_ids[0][input_token_count:], skip_special_tokens=True)
-	generated_tokens = len(generated_ids[0]) - input_token_count
+	generated_ids = outputs.sequences
+	generated_text = tokenizer.batch_decode(
+		generated_ids[:, inputs["input_ids"].shape[1]:], 
+		skip_special_tokens=True
+	)[0]  # Take first batch item for display
+	
+	generated_tokens = outputs.sequences.shape[1] - inputs["input_ids"].shape[1]
+
+	print("-" * 10)
+	print(tokenizer.decode(generated_ids[0], skip_special_tokens=True))
+	print("-" * 10)
 	
 	# Calculate per-token generation times
 	total_generation_time = generation_end - generation_start
 	output_tokens_per_sec = generated_tokens / total_generation_time if total_generation_time > 0 else 0
 	print(f"Output generation: {total_generation_time:.6f}s for {generated_tokens} tokens ({output_tokens_per_sec:.2f} tokens/sec)")
-	
-	# Calculate per-token times (differential)
-	token_generation_times = []
-	for i in range(1, len(token_times)):
-		token_generation_times.append(token_times[i] - token_times[i-1])
 	
 	peak_mem = bytes_to_gb(torch.cuda.max_memory_allocated()) if device_type == "cuda" else 0
 	
@@ -173,6 +170,7 @@ def measure_model_performance(model_name, precision=None, input_text="The quick 
 		"output_token_count": generated_tokens,
 		"output_tokens_per_sec": output_tokens_per_sec,
 		"total_generation_time": total_generation_time,
+		"batch_size": batch_size
 	}
 	
 	return {
@@ -189,7 +187,8 @@ def measure_model_performance(model_name, precision=None, input_text="The quick 
 		"precision": precision,
 		"device": device_type,
 		"generated_text": generated_text,
-		"token_timing_details": token_timing_details
+		"token_timing_details": token_timing_details,
+		"batch_size": batch_size
 	}
 
 if __name__ == "__main__":
@@ -197,7 +196,7 @@ if __name__ == "__main__":
 	parser.add_argument("--model", required=True, help="Hugging Face model identifier")
 	parser.add_argument("--precision", choices=["fp32", "fp16", "8bit", "4bit"], default="fp16")
 	parser.add_argument("--input", default="The quick brown fox", help="Input prompt")
-	parser.add_argument("--max_tokens", type=int, default=50)
+	parser.add_argument("--max_tokens", type=int, default=2048)
 	parser.add_argument("--batch_size", type=int, default=1)
 	parser.add_argument("--accelerator", choices=["cpu", "nvidia"], default="nvidia")
 	parser.add_argument("--benchmark_mode", choices=["llm", "embedding", "image", "all"], default="all")

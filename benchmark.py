@@ -67,8 +67,7 @@ if llm_mode_enabled:
 				'--benchmark_mode', benchmark_mode,
 				'--model', model_name,
 				'--precision', 'fp16',
-				'--input', 'Hello, world!',
-				'--max_tokens', '100',
+				'--input', prompt,
 				'--batch_size', '1'
 			]
 			
