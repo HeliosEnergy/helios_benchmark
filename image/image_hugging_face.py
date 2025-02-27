@@ -7,6 +7,7 @@ from PIL import Image
 import io
 import os
 from datetime import datetime
+from pathlib import Path
 
 def bytes_to_gb(bytes):
     return bytes / (1024 ** 3)
@@ -107,9 +108,10 @@ def measure_model_performance(model_name, precision=None, input_prompt="A scenic
     os.makedirs("./results", exist_ok=True)
     
     # Save one of the generated images to verify output
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     try:
         image = outputs.images[0]
-        filename = f"./results/generated_image_{model_name.replace('/', '_')}_{width}x{height}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+        filename = f"./results/generated_image_{model_name.replace('/', '_')}_{width}x{height}_{timestamp}.png"
         image.save(filename)
         print(f"Image saved to {filename}")
     except Exception as e:
@@ -125,7 +127,8 @@ def measure_model_performance(model_name, precision=None, input_prompt="A scenic
         "steps": num_inference_steps,
         "resolution": f"{width}x{height}",
         "image_path": filename,
-        "prompt": input_prompt
+        "prompt": input_prompt,
+        "timestamp": timestamp
     }
 
 if __name__ == "__main__":
@@ -156,3 +159,47 @@ if __name__ == "__main__":
     print("\n@@@BENCHMARK_RESULTS_START@@@")
     print(json.dumps(results))
     print("@@@BENCHMARK_RESULTS_END@@@")
+    
+    # Create results directory if it doesn't exist
+    results_dir = Path("./results")
+    results_dir.mkdir(exist_ok=True)
+    
+    # Create a clean model name for the filename (remove slashes)
+    clean_model_name = args.model.replace("/", "_")
+    
+    # Generate timestamp for filename
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Create filename
+    filename = f"perf_image_{clean_model_name}_{args.precision}_{timestamp}.json"
+    file_path = results_dir / filename
+    
+    # Add results to the file
+    with open(file_path, "w") as f:
+        json.dump(results, f, indent=2)
+    
+    print(f"\nBenchmark results saved to {file_path}")
+    
+    # Also save to a cumulative results file that combines all runs
+    cumulative_file = results_dir / f"perf_image_{clean_model_name}_{args.precision}_cumulative.json"
+    
+    # Load existing data if file exists
+    cumulative_data = []
+    if cumulative_file.exists():
+        try:
+            with open(cumulative_file, "r") as f:
+                cumulative_data = json.load(f)
+                if not isinstance(cumulative_data, list):
+                    cumulative_data = [cumulative_data]
+        except json.JSONDecodeError:
+            # If file exists but is not valid JSON, start fresh
+            cumulative_data = []
+    
+    # Add new results with timestamp
+    cumulative_data.append(results)
+    
+    # Write back the combined results
+    with open(cumulative_file, "w") as f:
+        json.dump(cumulative_data, f, indent=2)
+    
+    print(f"Results also appended to cumulative file: {cumulative_file}")

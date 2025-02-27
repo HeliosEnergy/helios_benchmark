@@ -5,6 +5,8 @@ import argparse
 import json
 import os
 import numpy as np
+from datetime import datetime
+from pathlib import Path
 
 def bytes_to_gb(bytes):
 	return bytes / (1024 ** 3)
@@ -94,7 +96,8 @@ def measure_model_performance(model_name, precision=None, input_text="The quick 
 	
 	# Save embeddings to file
 	os.makedirs("./results", exist_ok=True)
-	embedding_file = f"./results/embeddings_{model_name.replace('/', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.npy"
+	timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+	embedding_file = f"./results/embeddings_{model_name.replace('/', '_')}_{timestamp}.npy"
 	np.save(embedding_file, embeddings.cpu().numpy())
 	print(f"Embeddings saved to {embedding_file}")
 	
@@ -110,7 +113,8 @@ def measure_model_performance(model_name, precision=None, input_text="The quick 
 		"embedding_size": embedding_size,
 		"precision": precision,
 		"device": device,
-		"embedding_file": embedding_file
+		"embedding_file": embedding_file,
+		"timestamp": timestamp
 	}
 
 if __name__ == "__main__":
@@ -133,3 +137,47 @@ if __name__ == "__main__":
 	print("\n@@@BENCHMARK_RESULTS_START@@@")
 	print(json.dumps(results))
 	print("@@@BENCHMARK_RESULTS_END@@@")
+
+	# Create results directory if it doesn't exist
+	results_dir = Path("./results")
+	results_dir.mkdir(exist_ok=True)
+	
+	# Create a clean model name for the filename (remove slashes)
+	clean_model_name = args.model.replace("/", "_")
+	
+	# Get precision value to use in filename (might be None from args)
+	precision_str = results["precision"]
+	
+	# Create filename
+	filename = f"perf_embedding_{clean_model_name}_{precision_str}_{results['timestamp']}.json"
+	file_path = results_dir / filename
+	
+	# Add results to the file
+	with open(file_path, "w") as f:
+		json.dump(results, f, indent=2)
+	
+	print(f"\nBenchmark results saved to {file_path}")
+	
+	# Also save to a cumulative results file that combines all runs
+	cumulative_file = results_dir / f"perf_embedding_{clean_model_name}_{precision_str}_cumulative.json"
+	
+	# Load existing data if file exists
+	cumulative_data = []
+	if cumulative_file.exists():
+		try:
+			with open(cumulative_file, "r") as f:
+				cumulative_data = json.load(f)
+				if not isinstance(cumulative_data, list):
+					cumulative_data = [cumulative_data]
+		except json.JSONDecodeError:
+			# If file exists but is not valid JSON, start fresh
+			cumulative_data = []
+	
+	# Add new results
+	cumulative_data.append(results)
+	
+	# Write back the combined results
+	with open(cumulative_file, "w") as f:
+		json.dump(cumulative_data, f, indent=2)
+	
+	print(f"Results also appended to cumulative file: {cumulative_file}")

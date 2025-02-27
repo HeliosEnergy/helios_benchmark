@@ -3,6 +3,9 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 import time
 import argparse
 import json
+import os
+import datetime
+from pathlib import Path
 
 def bytes_to_gb(bytes):
 	return bytes / (1024 ** 3)
@@ -157,8 +160,11 @@ def measure_model_performance(model_name, precision=None, input_text="The quick 
 	
 	# Calculate per-token generation times
 	total_generation_time = generation_end - generation_start
-	output_tokens_per_sec = generated_tokens / total_generation_time if total_generation_time > 0 else 0
-	print(f"Output generation: {total_generation_time:.6f}s for {generated_tokens} tokens ({output_tokens_per_sec:.2f} tokens/sec)")
+	
+	# Account for batch size in the tokens per second calculation
+	total_generated_tokens = generated_tokens * batch_size
+	output_tokens_per_sec = total_generated_tokens / total_generation_time if total_generation_time > 0 else 0
+	print(f"Output generation: {total_generation_time:.6f}s for {total_generated_tokens} tokens total ({output_tokens_per_sec:.2f} tokens/sec)")
 	
 	peak_mem = bytes_to_gb(torch.cuda.max_memory_allocated()) if device_type == "cuda" else 0
 	
@@ -168,6 +174,7 @@ def measure_model_performance(model_name, precision=None, input_text="The quick 
 		"input_token_count": input_token_count,
 		"input_tokens_per_sec": input_tokens_per_sec,
 		"output_token_count": generated_tokens,
+		"total_output_tokens": total_generated_tokens,
 		"output_tokens_per_sec": output_tokens_per_sec,
 		"total_generation_time": total_generation_time,
 		"batch_size": batch_size
@@ -179,6 +186,7 @@ def measure_model_performance(model_name, precision=None, input_text="The quick 
 		"peak_vram": peak_mem,
 		"input_tokens": input_token_count,
 		"output_tokens": generated_tokens,
+		"total_output_tokens": total_generated_tokens,
 		"total_tokens": input_token_count + generated_tokens,
 		"input_tokenization_time": tokenization_time,
 		"input_tokens_per_sec": input_tokens_per_sec,
@@ -215,3 +223,48 @@ if __name__ == "__main__":
 	print("\n@@@BENCHMARK_RESULTS_START@@@")
 	print(json.dumps(results))
 	print("@@@BENCHMARK_RESULTS_END@@@")
+	
+	# Create results directory if it doesn't exist
+	results_dir = Path("./results")
+	results_dir.mkdir(exist_ok=True)
+	
+	# Create a clean model name for the filename (remove slashes)
+	clean_model_name = args.model.replace("/", "_")
+	
+	# Generate timestamp for filename
+	timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+	
+	# Create filename
+	filename = f"perf_llm_{clean_model_name}_{args.precision}_{timestamp}.json"
+	file_path = results_dir / filename
+	
+	# Add results to the file
+	with open(file_path, "w") as f:
+		json.dump(results, f, indent=2)
+	
+	print(f"\nBenchmark results saved to {file_path}")
+	
+	# Also save to a cumulative results file that combines all runs
+	cumulative_file = results_dir / f"perf_llm_{clean_model_name}_{args.precision}_cumulative.json"
+	
+	# Load existing data if file exists
+	cumulative_data = []
+	if cumulative_file.exists():
+		try:
+			with open(cumulative_file, "r") as f:
+				cumulative_data = json.load(f)
+				if not isinstance(cumulative_data, list):
+					cumulative_data = [cumulative_data]
+		except json.JSONDecodeError:
+			# If file exists but is not valid JSON, start fresh
+			cumulative_data = []
+	
+	# Add new results with timestamp
+	results["timestamp"] = timestamp
+	cumulative_data.append(results)
+	
+	# Write back the combined results
+	with open(cumulative_file, "w") as f:
+		json.dump(cumulative_data, f, indent=2)
+	
+	print(f"Results also appended to cumulative file: {cumulative_file}")
