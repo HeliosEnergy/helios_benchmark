@@ -10,9 +10,12 @@ services:
     volumes:
       - ./results:/app/results
       - ~/.cache/huggingface:/root/.cache/huggingface
+    env_file:
+      - .env
     environment:
       - ACCELERATOR=cpu
-      - BENCHMARK_MODE=all
+      - BENCHMARK_MODE=${BENCHMARK_MODE:-all}
+      - HF_TOKEN=${HF_TOKEN}
     ports:
       - "8080:8080"
     restart: unless-stopped
@@ -26,9 +29,12 @@ services:
     volumes:
       - ./results:/app/results
       - ~/.cache/huggingface:/root/.cache/huggingface
+    env_file:
+      - .env
     environment:
       - ACCELERATOR=nvidia
-      - BENCHMARK_MODE=all
+      - BENCHMARK_MODE=${BENCHMARK_MODE:-all}
+      - HF_TOKEN=${HF_TOKEN}
       - NVIDIA_VISIBLE_DEVICES=all
     ports:
       - "8080:8080"
@@ -50,9 +56,12 @@ services:
     volumes:
       - ./results:/app/results
       - ~/.cache/huggingface:/root/.cache/huggingface
+    env_file:
+      - .env
     environment:
       - ACCELERATOR=rocm
-      - BENCHMARK_MODE=all
+      - BENCHMARK_MODE=${BENCHMARK_MODE:-all}
+      - HF_TOKEN=${HF_TOKEN}
       - HSA_OVERRIDE_GFX_VERSION=10.3.0
     ports:
       - "8080:8080"

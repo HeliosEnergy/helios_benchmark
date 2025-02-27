@@ -4,6 +4,7 @@ AI benchmarking for GPUs
 Results written to ./results
 
 # Docker
+DockerHub: https://hub.docker.com/repository/docker/heliosai/helios-benchmark/general
 
 ### CPU
 
