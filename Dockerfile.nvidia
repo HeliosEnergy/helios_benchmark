@@ -1,5 +1,8 @@
 FROM nvidia/cuda:12.8.0-cudnn-devel-ubuntu22.04
 
+ADD . /app
+WORKDIR /app
+
 RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
@@ -20,9 +23,9 @@ RUN bash Miniconda3-latest-Linux-x86_64.sh -b -p /opt/conda
 # Set conda path
 ENV PATH /opt/conda/bin:$PATH
 
-ADD benchmark_server.sh /benchmark_server.sh
-ADD benchmark_server.py /benchmark_server.py
-RUN chmod +x /benchmark_server.sh
+RUN pip install --upgrade pip
+RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
+RUN pip install -r requirements.txt
 
 
-CMD ["/benchmark_server.sh"]
+CMD ["sh", "benchmark.sh"]

@@ -1,0 +1,64 @@
+version: "3.8"
+
+services:
+  benchmark-cpu:
+    build:
+      context: .
+      dockerfile: Dockerfile.cpu
+    profiles:
+      - cpu
+    volumes:
+      - ./results:/app/results
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    environment:
+      - ACCELERATOR=cpu
+      - BENCHMARK_MODE=all
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  benchmark-nvidia:
+    build:
+      context: .
+      dockerfile: Dockerfile.nvidia
+    profiles:
+      - nvidia
+    volumes:
+      - ./results:/app/results
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    environment:
+      - ACCELERATOR=nvidia
+      - BENCHMARK_MODE=all
+      - NVIDIA_VISIBLE_DEVICES=all
+    ports:
+      - "8080:8080"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  benchmark-amd:
+    build:
+      context: .
+      dockerfile: Dockerfile.amd
+    profiles:
+      - amd
+    volumes:
+      - ./results:/app/results
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    environment:
+      - ACCELERATOR=rocm
+      - BENCHMARK_MODE=all
+      - HSA_OVERRIDE_GFX_VERSION=10.3.0
+    ports:
+      - "8080:8080"
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    group_add:
+      - video
+    restart: unless-stopped

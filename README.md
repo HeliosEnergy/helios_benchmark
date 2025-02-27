@@ -1,7 +1,17 @@
 # helios_benchmark
 AI benchmarking for GPUs
 
-UI accessible at localhost:8888
+Results written to ./results
 
-# NVIDIA
+# Docker
+
+### CPU
+```
+docker compose --profile cpu up
+```
+
+### NVIDIA
 Uses CUDA 12.8 for testing.
+```
+docker compose --profile nvidia up
+```

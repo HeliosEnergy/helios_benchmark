@@ -224,4 +224,7 @@ if embedding_mode_enabled:
 		print(f"Embedding '{model_name}' completed")
 		print("-" * 80)
 		
-
+print("=" * 80)
+print("Benchmark completed")
+print("=" * 80)
+input("Press Enter to exit...")
