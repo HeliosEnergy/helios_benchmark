@@ -12,13 +12,19 @@ def measure_model_performance(model_name, precision=None, input_text="The quick 
 	
 	
 	# Check if CUDA is available
-	device = "cuda" if torch.cuda.is_available() else "cpu"
+	device_type = "cuda" if torch.cuda.is_available() else "cpu"
 	
 	# Initialize memory tracking
 	start_mem = 0
-	if device == "cuda":
+	if device_type == "cuda":
 		torch.cuda.reset_peak_memory_stats()
 		start_mem = torch.cuda.memory_allocated()
+
+	print("Device:", device_type)
+
+	if device_type == "cuda":
+		device = "cuda:0"
+		print("Device id:", device)
 	
 	# Load tokenizer first to check model config
 	print(f"Loading tokenizer for {model_name}...")
@@ -38,7 +44,7 @@ def measure_model_performance(model_name, precision=None, input_text="The quick 
 	
 	# Configure model loading parameters
 	load_params = {
-		"device_map": "auto" if device == "cuda" else "cpu",
+		"device_map": "auto" if device_type == "cuda" else "cpu",
 		"trust_remote_code": True
 	}
 	
@@ -54,7 +60,7 @@ def measure_model_performance(model_name, precision=None, input_text="The quick 
 	model = AutoModelForCausalLM.from_pretrained(model_name, **load_params)
 	
 	# Calculate model memory footprint
-	if device == "cuda":
+	if device_type == "cuda":
 		model_mem = torch.cuda.memory_allocated() - start_mem
 		print(f"Model loaded. VRAM usage: {bytes_to_gb(model_mem):.2f}GB")
 	else:
@@ -73,7 +79,7 @@ def measure_model_performance(model_name, precision=None, input_text="The quick 
 	generator(input_text, max_new_tokens=10, batch_size=batch_size)
 
 	# Performance measurement
-	if device == "cuda":
+	if device_type == "cuda":
 		torch.cuda.synchronize()
 	start_time = time.time()
 	
@@ -85,7 +91,7 @@ def measure_model_performance(model_name, precision=None, input_text="The quick 
 			pad_token_id=tokenizer.eos_token_id
 		)
 	
-	if device == "cuda":
+	if device_type == "cuda":
 		torch.cuda.synchronize()
 	elapsed = time.time() - start_time
 	
@@ -93,16 +99,16 @@ def measure_model_performance(model_name, precision=None, input_text="The quick 
 	generated_tokens = len(tokenizer.encode(outputs[0]['generated_text']))
 	tokens_per_sec = generated_tokens / elapsed
 	
-	peak_mem = bytes_to_gb(torch.cuda.max_memory_allocated()) if device == "cuda" else 0
+	peak_mem = bytes_to_gb(torch.cuda.max_memory_allocated()) if device_type == "cuda" else 0
 	
 	return {
-		"vram_usage": bytes_to_gb(model_mem) if device == "cuda" else 0,
+		"vram_usage": bytes_to_gb(model_mem) if device_type == "cuda" else 0,
 		"peak_vram": peak_mem,
 		"total_tokens": generated_tokens,
 		"inference_time": elapsed,
 		"tokens_per_sec": tokens_per_sec,
 		"precision": precision,
-		"device": device
+		"device": device_type
 	}
 
 if __name__ == "__main__":

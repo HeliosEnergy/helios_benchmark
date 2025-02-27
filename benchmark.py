@@ -66,7 +66,7 @@ if llm_mode_enabled:
 				'--accelerator', accelerator_type,
 				'--benchmark_mode', benchmark_mode,
 				'--model', model_name,
-				'--precision', 'fp32',
+				'--precision', 'fp16',
 				'--input', 'Hello, world!',
 				'--max_tokens', '100',
 				'--batch_size', '1'
@@ -225,5 +225,4 @@ if embedding_mode_enabled:
 		print(f"Embedding '{model_name}' completed")
 		print("-" * 80)
 		
-
 
