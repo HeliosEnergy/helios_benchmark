@@ -28,4 +28,4 @@ RUN pip install torch torchvision torchaudio --index-url https://download.pytorc
 RUN pip install -r requirements.txt
 
 
-CMD ["sh", "benchmark.sh"]
+CMD ["sh", "./benchmark.sh"]
