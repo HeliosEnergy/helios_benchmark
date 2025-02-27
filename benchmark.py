@@ -182,12 +182,15 @@ if embedding_mode_enabled:
 	for model_name in [
 		"sentence-transformers/all-MiniLM-L6-v2",
 	]:
+
+		hamlet_text = open("datasets/text/hamlet.txt", "r").read()
 		command = [
 			'python',
 			'embedding/embed_hugging_face.py',
 			'--accelerator', accelerator_type,
 			'--benchmark_mode', benchmark_mode,
 			'--model', model_name,
+			'--input', hamlet_text,
 		]
 		process = subprocess.Popen(
 			command,
