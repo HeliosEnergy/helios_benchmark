@@ -23,10 +23,6 @@ RUN bash Miniconda3-latest-Linux-x86_64.sh -b -p /opt/conda
 # Set conda path
 ENV PATH /opt/conda/bin:$PATH
 
-RUN conda init
-RUN conda create -n benchmark_env python=3.10
-RUN conda activate benchmark_env
-
 RUN pip install --upgrade pip
 RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
 RUN pip install -r requirements.txt
