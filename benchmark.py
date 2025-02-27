@@ -61,7 +61,7 @@ if llm_mode_enabled:
 			"Write me an essay about Julius Caesar's time in Gaul, but in the style of a carribean pirate.",
 		]:
 			command = [
-				'python',
+				os.getenv('PYTHON_CMD'),
 				'llm/llm_hugging_face.py',
 				'--accelerator', accelerator_type,
 				'--benchmark_mode', benchmark_mode,
@@ -133,7 +133,7 @@ if image_mode_enabled:
 				"A serene forest with a waterfall",
 			]:
 				command = [
-					'python',
+					os.getenv('PYTHON_CMD'),
 					'image/image_hugging_face.py',
 					'--accelerator', accelerator_type,
 					'--benchmark_mode', benchmark_mode,
@@ -185,7 +185,7 @@ if embedding_mode_enabled:
 
 		hamlet_text = open("datasets/text/hamlet.txt", "r").read()
 		command = [
-			'python',
+			os.getenv('PYTHON_CMD'),
 			'embedding/embed_hugging_face.py',
 			'--accelerator', accelerator_type,
 			'--benchmark_mode', benchmark_mode,
