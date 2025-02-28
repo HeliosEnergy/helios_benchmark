@@ -67,6 +67,10 @@ def measure_model_performance(model_name, precision=None, input_text="The quick 
 		load_params["load_in_8bit"] = True
 	elif precision == "4bit":
 		load_params["load_in_4bit"] = True
+		# Add optimized 4-bit params
+		load_params["bnb_4bit_compute_dtype"] = torch.float16  # Use FP16 for compute
+		load_params["bnb_4bit_use_double_quant"] = True  # Use nested quantization for more memory savings
+		load_params["bnb_4bit_quant_type"] = "nf4"  # Use normalized float 4-bit quantization (better accuracy)
 	else:
 		load_params["torch_dtype"] = torch.float16 if precision == "fp16" else torch.float32
 
@@ -94,12 +98,23 @@ def measure_model_performance(model_name, precision=None, input_text="The quick 
 		# Enable Flash Attention if available
 		model.config.attn_implementation = "flash_attention_2"
 		print("Enabled Flash Attention 2")
-	
+
+	# Enable optimized memory management for KV cache
+	if hasattr(model, "config"):
+		if hasattr(model.config, "use_cache") and device_type == "cuda":
+			model.config.use_cache = True
+			print("Enabled KV-cache for faster generation")
+
 	# Apply torch.compile for PyTorch 2.0+ if available
 	if hasattr(torch, "compile") and device_type == "cuda":
 		try:
-			model = torch.compile(model)
-			print("Applied torch.compile() for faster inference")
+			# Use more aggressive optimization for 4-bit models
+			if precision == "4bit":
+				model = torch.compile(model, mode="reduce-overhead")
+				print("Applied torch.compile() with reduce-overhead mode for faster inference")
+			else:
+				model = torch.compile(model)
+				print("Applied torch.compile() for faster inference")
 		except Exception as e:
 			print(f"Could not apply torch.compile(): {e}")
 	
@@ -150,8 +165,13 @@ def measure_model_performance(model_name, precision=None, input_text="The quick 
 			"use_cache": True,         # Enable KV caching
 			"pad_token_id": tokenizer.pad_token_id,
 			"return_dict_in_generate": True,
-			"output_scores": True      # Needed for token-by-token timing
+			"output_scores": True,     # Needed for token-by-token timing
 		}
+		
+		# For 4-bit models, optimize memory usage during generation
+		if precision == "4bit" and device_type == "cuda":
+			# Increase sequence length growth factor to reduce reallocations
+			generate_kwargs["max_length"] = inputs["input_ids"].shape[1] + max_tokens
 		
 		outputs = model.generate(**inputs, **generate_kwargs)
 	
