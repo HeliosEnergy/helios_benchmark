@@ -49,16 +49,20 @@ image_mode_enabled = benchmark_mode == "image" or \
 if llm_mode_enabled:
 	original_argv = sys.argv
 	
-	for model_name in [ 
-		"deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+	for model_name, precision in [ 
+		["meta-llama/Llama-3.1-8B", "4bit"],
+		#["meta-llama/Meta-Llama-3-8B-Instruct", "4bit"],
+		#["TheBloke/CodeLlama-7B-Instruct-GGUF", "8bit"],
+		#["meta-llama/Meta-Llama-3-8B-Instruct", "8bit"],
+		["deepseek-ai/DeepSeek-R1-Distill-Llama-8B", "fp16"],
 		#"meta-llama/Llama-3.2-3B-Instruct",
 	]:
 
 		for prompt in [
 			"Hello, world!",
 			"What is the capital of France?",
-			"Write me a python script which calculates the fibonacci sequence up to 1000000. Each number must be printed, you need to use recursion.",
-			"Write me an essay about Julius Caesar's time in Gaul, but in the style of a carribean pirate.",
+			"Write me a python script which calculates the fibonacci sequence up to the 10000th number. Each number must be printed, you need to use recursion.",
+			"Write me an essay about Julius Caesar's time in Gaul, but in the style of a Carribean pirate.",
 		]:
 			command = [
 				os.getenv('PYTHON_CMD'),
@@ -66,10 +70,11 @@ if llm_mode_enabled:
 				'--accelerator', accelerator_type,
 				'--benchmark_mode', benchmark_mode,
 				'--model', model_name,
-				'--precision', 'fp16',
+				'--precision', precision,
 				'--input', prompt,
 				'--batch_size', '1'
 			]
+			
 			
 			# Use subprocess to capture output in real-time
 			process = subprocess.Popen(

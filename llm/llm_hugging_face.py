@@ -60,12 +60,26 @@ def measure_model_performance(model_name, precision=None, input_text="The quick 
 		"trust_remote_code": True
 	}
 	
-	if precision == "8bit":
+	if device_type == "cpu" and precision in ["4bit", "8bit"]:
+		print(f"Warning: {precision} quantization not fully supported on CPU. Falling back to fp32.")
+		return
+	elif precision == "8bit":
 		load_params["load_in_8bit"] = True
 	elif precision == "4bit":
 		load_params["load_in_4bit"] = True
 	else:
 		load_params["torch_dtype"] = torch.float16 if precision == "fp16" else torch.float32
+
+	# Add this specific handling for mlx-community quantized models
+	if "mlx-community" in model_name.lower() and (precision == "8bit" or precision == "4bit"):
+		print(f"MLX Community quantized model detected, using specialized loading parameters...")
+		# Use FP16 and device_map="auto" for these models
+		precision = "fp16"
+		load_params = {
+			"device_map": "auto" if device_type == "cuda" else "cpu",
+			"torch_dtype": torch.float16,
+			"trust_remote_code": True
+		}
 
 	# Load model with progress monitoring
 	print(f"Loading {model_name} in {precision} precision...")
@@ -219,52 +233,56 @@ if __name__ == "__main__":
 		args.batch_size
 	)
 	
-	# Output JSON marker for easy parsing
-	print("\n@@@BENCHMARK_RESULTS_START@@@")
-	print(json.dumps(results))
-	print("@@@BENCHMARK_RESULTS_END@@@")
-	
-	# Create results directory if it doesn't exist
-	results_dir = Path("./results")
-	results_dir.mkdir(exist_ok=True)
-	
-	# Create a clean model name for the filename (remove slashes)
-	clean_model_name = args.model.replace("/", "_")
-	
-	# Generate timestamp for filename
-	timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-	
-	# Create filename
-	filename = f"perf_llm_{clean_model_name}_{args.precision}_{timestamp}.json"
-	file_path = results_dir / filename
-	
-	# Add results to the file
-	with open(file_path, "w") as f:
-		json.dump(results, f, indent=2)
-	
-	print(f"\nBenchmark results saved to {file_path}")
-	
-	# Also save to a cumulative results file that combines all runs
-	cumulative_file = results_dir / f"perf_llm_{clean_model_name}_{args.precision}_cumulative.json"
-	
-	# Load existing data if file exists
-	cumulative_data = []
-	if cumulative_file.exists():
-		try:
-			with open(cumulative_file, "r") as f:
-				cumulative_data = json.load(f)
-				if not isinstance(cumulative_data, list):
-					cumulative_data = [cumulative_data]
-		except json.JSONDecodeError:
-			# If file exists but is not valid JSON, start fresh
-			cumulative_data = []
-	
-	# Add new results with timestamp
-	results["timestamp"] = timestamp
-	cumulative_data.append(results)
-	
-	# Write back the combined results
-	with open(cumulative_file, "w") as f:
-		json.dump(cumulative_data, f, indent=2)
-	
-	print(f"Results also appended to cumulative file: {cumulative_file}")
+	# Only output and save results if they're not None
+	if results is not None:
+		# Output JSON marker for easy parsing
+		print("\n@@@BENCHMARK_RESULTS_START@@@")
+		print(json.dumps(results))
+		print("@@@BENCHMARK_RESULTS_END@@@")
+		
+		# Create results directory if it doesn't exist
+		results_dir = Path("./results")
+		results_dir.mkdir(exist_ok=True)
+		
+		# Create a clean model name for the filename (remove slashes)
+		clean_model_name = args.model.replace("/", "_")
+		
+		# Generate timestamp for filename
+		timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+		
+		# Create filename
+		filename = f"perf_llm_{clean_model_name}_{args.precision}_{timestamp}.json"
+		file_path = results_dir / filename
+		
+		# Add results to the file
+		with open(file_path, "w") as f:
+			json.dump(results, f, indent=2)
+		
+		print(f"\nBenchmark results saved to {file_path}")
+		
+		# Also save to a cumulative results file that combines all runs
+		cumulative_file = results_dir / f"perf_llm_{clean_model_name}_{args.precision}_cumulative.json"
+		
+		# Load existing data if file exists
+		cumulative_data = []
+		if cumulative_file.exists():
+			try:
+				with open(cumulative_file, "r") as f:
+					cumulative_data = json.load(f)
+					if not isinstance(cumulative_data, list):
+						cumulative_data = [cumulative_data]
+			except json.JSONDecodeError:
+				# If file exists but is not valid JSON, start fresh
+				cumulative_data = []
+		
+		# Add new results with timestamp
+		results["timestamp"] = timestamp
+		cumulative_data.append(results)
+		
+		# Write back the combined results
+		with open(cumulative_file, "w") as f:
+			json.dump(cumulative_data, f, indent=2)
+		
+		print(f"Results also appended to cumulative file: {cumulative_file}")
+	else:
+		print("\nNo benchmark results to save - skipping file operations")
