@@ -122,6 +122,7 @@ if image_mode_enabled:
 	
 	for model_name in [
 		"stabilityai/stable-diffusion-2-1",
+		"black-forest-labs/FLUX.1-dev",
 	]:
 		for resolution, num_inference_steps in [
 			["256", 50],
