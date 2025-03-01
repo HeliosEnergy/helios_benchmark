@@ -11,6 +11,9 @@ original_mode = os.getenv('BENCHMARK_MODE')
 # load env
 load_dotenv()
 
+print("ORIGINAL BENCHMARK MODE: ", original_mode)
+print("BENCHMARK MODE: ", os.getenv('BENCHMARK_MODE'))
+
 benchmark_mode = ""
 if original_mode == "" or original_mode == None or original_mode == "None":
 	benchmark_mode = os.getenv('BENCHMARK_MODE')
@@ -39,12 +42,13 @@ print(f"Benchmark mode: {benchmark_mode} (accelerator type: {accelerator_type})"
 llm_mode_enabled = benchmark_mode == "llm" or \
 	benchmark_mode == "text-only" or \
 	benchmark_mode == "all"
-embedding_mode_enabled = benchmark_mode == "embedding" or \
+embedding_mode_enabled = benchmark_mode == "embed" or \
 	benchmark_mode == "text-only" or \
 	benchmark_mode == "all"
 image_mode_enabled = benchmark_mode == "image" or \
 	benchmark_mode == "all"
 
+print("BENCHMARK MODE: ", benchmark_mode)
 
 if llm_mode_enabled:
 	original_argv = sys.argv
@@ -180,50 +184,57 @@ if embedding_mode_enabled:
 	
 	for model_name in [
 		"sentence-transformers/all-MiniLM-L6-v2",
+		"BAAI/bge-m3"
 	]:
+		for [file_name, file_path] in [
+			["README.md", "README.md"],
+			["hamlet", "datasets/text/hamlet.txt"],
+			["romeo_and_juliet", "datasets/text/romeo_and_juliet.txt"],
+		]:
+			text = open(file_path, "r").read()
+			command = [
+				os.getenv('PYTHON_CMD'),
+				'embedding/embed_hugging_face.py',
+				'--accelerator', accelerator_type,
+				'--model', model_name,
+				'--input', text,
+				'--file_name', file_name,
+			]
+			process = subprocess.Popen(
+				command,
+				stdout=subprocess.PIPE,
+				stderr=subprocess.STDOUT,
+				text=True,
+				bufsize=1
+			)
 
-		hamlet_text = open("datasets/text/hamlet.txt", "r").read()
-		command = [
-			os.getenv('PYTHON_CMD'),
-			'embedding/embed_hugging_face.py',
-			'--accelerator', accelerator_type,
-			'--benchmark_mode', benchmark_mode,
-			'--model', model_name,
-			'--input', hamlet_text,
-		]
-		process = subprocess.Popen(
-			command,
-			stdout=subprocess.PIPE,
-			stderr=subprocess.STDOUT,
-			text=True,
-			bufsize=1
-		)
+			full_output = []
+			for line in iter(process.stdout.readline, ''):
+				print(line, end='')
+				full_output.append(line)
 
-		full_output = []
-		for line in iter(process.stdout.readline, ''):
-			print(line, end='')
-			full_output.append(line)
+			process.stdout.close()
+			process.wait()
 
-		process.stdout.close()
-		process.wait()
+			process_output = ''.join(full_output)
+			
+			start_marker = "@@@BENCHMARK_RESULTS_START@@@"
+			end_marker = "@@@BENCHMARK_RESULTS_END@@@"
 
-		process_output = ''.join(full_output)
-		
-		start_marker = "@@@BENCHMARK_RESULTS_START@@@"
-		end_marker = "@@@BENCHMARK_RESULTS_END@@@"
+			if start_marker in process_output and end_marker in process_output:
+				json_str = process_output.split(start_marker)[1].split(end_marker)[0].strip()
+				try:
+					results = json.loads(json_str)
+					print("\nParsed Results:")
+					print(json.dumps(results, indent=2))
+				except json.JSONDecodeError as e:
+					print(f"Error parsing results JSON: {e}")
 
-		if start_marker in process_output and end_marker in process_output:
-			json_str = process_output.split(start_marker)[1].split(end_marker)[0].strip()
-			try:
-				results = json.loads(json_str)
-				print("\nParsed Results:")
-				print(json.dumps(results, indent=2))
-			except json.JSONDecodeError as e:
-				print(f"Error parsing results JSON: {e}")
+			print(f"Embedding '{model_name}' completed")
+			print("-" * 80)
 
-		print(f"Embedding '{model_name}' completed")
-		print("-" * 80)
-		
+			import numpy as np
+			
 print("=" * 80)
 print("Benchmark completed")
 print("=" * 80)

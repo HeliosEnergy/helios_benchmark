@@ -23,7 +23,12 @@ def mean_pooling(model_output, attention_mask):
 		input_mask_expanded.sum(1), min=1e-9
 	)
 
-def measure_model_performance(model_name, precision=None, input_text="The quick brown fox"):
+def measure_model_performance(
+	model_name,
+	precision=None,
+	input_text="The quick brown fox",
+	file_name=""
+):
 	"""Benchmark embedding model performance across key metrics"""
 	
 	# Check if CUDA is available
@@ -72,6 +77,10 @@ def measure_model_performance(model_name, precision=None, input_text="The quick 
 
 	# Tokenize input
 	inputs = tokenizer(input_text, return_tensors="pt", padding=True, truncation=True)
+	# Count tokens
+	token_count = inputs["input_ids"].shape[1]
+	print(f"Input tokenized. Token count: {token_count}")
+	
 	inputs = {k: v.to(device) for k, v in inputs.items()}
 
 	# Warmup run
@@ -91,13 +100,17 @@ def measure_model_performance(model_name, precision=None, input_text="The quick 
 		torch.cuda.synchronize()
 	elapsed = time.time() - start_time
 	
+	# Calculate tokens per second
+	tokens_per_second = token_count / elapsed if elapsed > 0 else 0
+	print(f"Inference time: {elapsed:.4f}s ({tokens_per_second:.2f} tokens/sec)")
+	
 	# Get embeddings
 	embeddings = outputs.last_hidden_state.mean(dim=1)
 	
 	# Save embeddings to file
 	os.makedirs("./results", exist_ok=True)
 	timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-	embedding_file = f"./results/embeddings_{model_name.replace('/', '_')}_{timestamp}.npy"
+	embedding_file = f"./results/embeddings_{model_name.replace('/', '_')}_{file_name}_{timestamp}.npy"
 	np.save(embedding_file, embeddings.cpu().numpy())
 	print(f"Embeddings saved to {embedding_file}")
 	
@@ -114,7 +127,11 @@ def measure_model_performance(model_name, precision=None, input_text="The quick 
 		"precision": precision,
 		"device": device,
 		"embedding_file": embedding_file,
-		"timestamp": timestamp
+		"timestamp": timestamp,
+		"input_text": input_text,
+		"file_name": file_name,
+		"token_count": token_count,
+		"tokens_per_second": tokens_per_second
 	}
 
 if __name__ == "__main__":
@@ -123,14 +140,15 @@ if __name__ == "__main__":
 	parser.add_argument("--precision", choices=["fp32", "fp16", "8bit", "4bit"], default=None)
 	parser.add_argument("--input", default="The quick brown fox", help="Input text")
 	parser.add_argument("--accelerator", choices=["cpu", "nvidia"], default="nvidia")
-	parser.add_argument("--benchmark_mode", choices=["llm", "embedding", "image", "all"], default="all")
-	
+	parser.add_argument("--file_name", default="", help="File name")
+
 	args = parser.parse_args()
 	
 	results = measure_model_performance(
 		args.model,
 		args.precision,
-		args.input
+		args.input,
+		args.file_name
 	)
 	
 	# Output JSON marker for easy parsing
