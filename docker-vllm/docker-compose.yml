@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  vllm-benchmark:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+              count: 1
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./benchmarks:/opt/vllm/benchmarks
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import vllm; print('vLLM is installed')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
